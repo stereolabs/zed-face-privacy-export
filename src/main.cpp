@@ -38,8 +38,12 @@ using namespace sl;
 bool is_playback = false;
 
 bool isGuiAvailable() {
+#if ENABLE_GUI
     const char* display = getenv("DISPLAY");
     return (display != nullptr && strlen(display) > 0);
+#else
+    return false;
+#endif
 }
 
 void print(string msg_prefix, ERROR_CODE err_code = ERROR_CODE::SUCCESS, string msg_suffix = "") {
@@ -157,14 +161,14 @@ void printProgressBar(int current, int total, int barWidth = 50) {
 
 void parseArgs(int argc, char **argv, InitParameters& param, std::string& outputFile) {
     if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <input.svo> [output_file]" << std::endl;
+        std::cout << "Usage: " << argv[0] << " <input.svo> [output_file] [--flip]" << std::endl;
         std::exit(1);
     }
 
     std::string inputFile = argv[1];
     if (inputFile.find(".svo") == std::string::npos && inputFile.find(".svo2") == std::string::npos) {
         std::cout << "[Error] First argument must be an SVO file (*.svo or *.svo2)" << std::endl;
-        std::cout << "Usage: " << argv[0] << " <input.svo|input.svo2> [output_file]" << std::endl;
+        std::cout << "Usage: " << argv[0] << " <input.svo|input.svo2> [output_file] [--flip]" << std::endl;
         std::exit(1);
     }
 
@@ -173,10 +177,22 @@ void parseArgs(int argc, char **argv, InitParameters& param, std::string& output
     is_playback = true;
     std::cout << "[Sample] Using SVO File input: " << inputFile << std::endl;
 
-    // Optional output file parameter
-    if (argc > 2) {
-        outputFile = argv[2];
-        std::cout << "[Sample] Output file set to: " << outputFile << std::endl;
+    // Initialize flip mode to OFF by default
+    param.camera_image_flip = FLIP_MODE::OFF;
+
+    // Parse remaining arguments
+    bool outputFileSet = false;
+    for (int i = 2; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--flip") {
+            param.camera_image_flip = FLIP_MODE::ON;
+            std::cout << "[Sample] Camera image flip enabled" << std::endl;
+        } else if (!outputFileSet) {
+            // First non-flag argument is the output file
+            outputFile = arg;
+            outputFileSet = true;
+            std::cout << "[Sample] Output file set to: " << outputFile << std::endl;
+        }
     }
 }
 
@@ -252,7 +268,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-#if ENABLE_GUI
     string window_name = "ZED";
     char key = ' ';
     
@@ -260,7 +275,6 @@ int main(int argc, char **argv) {
         cv::namedWindow(window_name, cv::WINDOW_NORMAL);
         cv::createTrackbar("Confidence", window_name, &detection_confidence, 100);
     }
-#endif
 
     Objects objects;
     int i = 0;
@@ -292,13 +306,11 @@ int main(int argc, char **argv) {
 
             printProgressBar(i++, num_frames);
 
-#if ENABLE_GUI
             if (gui_available) {
                 cv::imshow(window_name, cv_img);
                 key = cv::waitKey(10);
                 if (key == 'q') quit = true;
             }
-#endif
         }
 
         if (is_playback && zed.getSVOPosition() == zed.getSVONumberOfFrames())
